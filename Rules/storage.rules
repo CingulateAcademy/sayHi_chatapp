@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: is the user signed in?
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: is the user a participant of the conversation?
+    // We allow any authenticated user to write under conversations/{conversationId}/
+    // for simplicity. For stricter security you can mirror participant checks
+    // via custom claims or Cloud Functions.
+    function isValidImage() {
+      return request.resource.size < 10 * 1024 * 1024          // max 10 MB
+             && request.resource.contentType.matches('image/.*');
+    }
+
+    // Conversation media
+    match /conversations/{conversationId}/{fileName} {
+      // Anyone signed in can read (images are shared between participants)
+      allow read: if isSignedIn();
+
+      // Only signed-in users can upload valid images
+      allow create: if isSignedIn() && isValidImage();
+
+      // No updates or deletes from the client for now
+      allow update, delete: if false;
+    }
+
+    // Future: user avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+                            && request.auth.uid == userId
+                            && isValidImage();
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
