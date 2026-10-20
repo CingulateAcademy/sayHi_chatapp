@@ -5,6 +5,8 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var appeared = false
+    @State private var resetSent = false
+    @State private var showResetAlert = false
     @FocusState private var focusedField: Field?
 
     enum Field { case email, password }
@@ -47,7 +49,11 @@ struct LoginView: View {
                             Task { await login() }
                         }
 
-                        Button("Forgot password?") { }
+                        Button("Forgot password?") {
+                            Task{
+                                await sendReset()
+                            }
+                        }
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(Color.sayHiIndigoLight)
                     }
@@ -82,6 +88,18 @@ struct LoginView: View {
         .scrollDismissesKeyboard(.interactively)
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
+        }.alert(resetSent ? "Please check your email" : "Reset Password", isPresented: $showResetAlert){
+            Button("OK", role: .cancel){}
+            
+        }message:{
+            
+            if resetSent {
+                Text("We sent password reset link to your \(email)")
+            }else{
+                Text(authService.errorMessage ?? "Something went wrong!")
+            }
+            
+            
         }
     }
 
@@ -105,5 +123,25 @@ struct LoginView: View {
         Haptics.light()
         await authService.signIn(email: email, password: password)
         if authService.errorMessage != nil { Haptics.error() }
+        }
+    
+    
+    private func sendReset()async{
+       
+        focusedField = nil
+        
+        let ok = await authService.resetPassword(email: email)
+        
+        resetSent = ok
+        
+        
+        showResetAlert  = true
+        
+        
+        if ok {Haptics.success()} else {Haptics.error()}
+        
+        
     }
+    
+
 }

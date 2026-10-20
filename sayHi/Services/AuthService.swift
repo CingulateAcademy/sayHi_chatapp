@@ -12,21 +12,24 @@ final class AuthService {
     private var db: Firestore {
         Firestore.firestore()
     }
-    private var currentNonce: String?
     private var authStateHandle: AuthStateDidChangeListenerHandle?
 
     init() {
             authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-                self?.user = user
-                if let user {
-                    Task {
-                        do {
-                            try await self?.ensureUserDocumentExists(for: user)
-                        } catch {
-                            self?.errorMessage = error.localizedDescription
-                        }
-                    }
+                
+                guard let self else{return }
+
+                
+                guard let user else{
+                    self.user = nil
+                    return
                 }
+                
+                Task{
+                    await self.validateAndSetUser(user)
+                }
+                
+                
             }
         }
 
@@ -38,7 +41,37 @@ final class AuthService {
             }
         }
     
-    
+    private func validateAndSetUser(_ user : User)async{
+        
+        do{
+            try await user.reload()
+            
+            await MainActor.run {self.user = Auth.auth().currentUser}
+            try await ensureUserDocumentExists(for: Auth.auth().currentUser ?? user)
+            
+            
+        }catch{
+            
+            let nsError = error as NSError
+            
+            let codeThatrequireSignout: Set<Int> = [17011,17005,17021,17014]
+            if nsError.domain == AuthErrorDomain && codeThatrequireSignout.contains(nsError.code)
+            {
+                print("Auth user invalid \(nsError.code) signing out locally")
+                
+                await MainActor.run{
+                    try? Auth.auth().signOut()
+                    self.user = nil
+                }
+            }else{
+                await MainActor.run {self.user = user}
+                try? await ensureUserDocumentExists(for: user)
+            }
+            
+        }
+        
+        
+    }
     
 
     func signUp(email: String, password: String, displayName: String) async {
@@ -80,24 +113,55 @@ final class AuthService {
             errorMessage = error.localizedDescription
         }
     }
+    
+    func resetPassword(email: String) async -> Bool{
+        
+        
+        let trim = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !trim.isEmpty else {
+            errorMessage = "You have to enter an email"
+            return false
+        }
+        
+        isLoading = true
+        
+        errorMessage = nil
+        
+        defer {isLoading = false}
+        
+        do{
+            try await Auth.auth().sendPasswordReset(withEmail: trim)
+            return true
+            
+        }catch{
+            errorMessage = error.localizedDescription
+            return false
+            
+        }
+        
+        
+    }
 
     private func ensureUserDocumentExists(for user: User, fallbackDisplayName: String? = nil) async throws {
         let userRef = db.collection("users").document(user.uid)
         let snapshot = try await userRef.getDocument()
 
-        if snapshot.exists {
-            // Optional: update lastSeen
-            try await userRef.updateData([
-                "lastSeen": FieldValue.serverTimestamp()
-            ])
-        } else {
-            try await createUserDocument(
-                user: user,
-                displayName: fallbackDisplayName ?? user.displayName ?? "User"
+        guard snapshot.exists else{
+            throw NSError(
+                domain: "AuthService",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: "User profile no longer exists"]
             )
         }
+        
+        try await userRef.updateData([
+            "lastSeen": FieldValue.serverTimestamp()
+        ])
     }
 
+  
+    
     private func createUserDocument(user: User, displayName: String) async throws {
         let data: [String: Any] = [
             "displayName": displayName,
