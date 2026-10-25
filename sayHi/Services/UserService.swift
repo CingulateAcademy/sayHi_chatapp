@@ -6,6 +6,7 @@ import FirebaseStorage
 
 
 @Observable
+@MainActor
 final class UserService{
     
     var currentUserProfile: UserProfile?
@@ -158,25 +159,42 @@ final class UserService{
             let metadata = StorageMetadata()
             metadata.contentType = "image/jpeg"
 
-            _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<StorageMetadata, Error>) in
-                let task = storageRef.putData(imageData, metadata: metadata)
-
-                task.observe(.progress) { [weak self] snapshot in
-                    guard let progress = snapshot.progress else { return }
-                    let percent = Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
-                    Task { @MainActor in
-                        self?.uploadProgress = percent
-                    }
+//            _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<StorageMetadata, Error>) in
+//                let task = storageRef.putData(imageData, metadata: metadata)
+//
+//                task.observe(.progress) { [weak self] snapshot in
+//                    guard let progress = snapshot.progress else { return }
+//                    let percent = Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
+//                    Task { @MainActor in
+//                        self?.uploadProgress = percent
+//                    }
+//                }
+//
+//                task.observe(.success) { snapshot in
+//                    continuation.resume(returning: snapshot.metadata ?? StorageMetadata())
+//                }
+//
+//                task.observe(.failure) { snapshot in
+//                    continuation.resume(throwing: snapshot.error ?? NSError(domain: "Storage", code: -1))
+//                }
+//            }
+            
+            let _ = try await storageRef.putDataAsync(imageData, metadata: metadata){
+                [weak self] progress in
+                
+                guard let progress else {return}
+                
+                
+                let percent = Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
+                
+                Task{
+                    @MainActor in
+                    
+                    self?.uploadProgress = percent
                 }
-
-                task.observe(.success) { snapshot in
-                    continuation.resume(returning: snapshot.metadata ?? StorageMetadata())
-                }
-
-                task.observe(.failure) { snapshot in
-                    continuation.resume(throwing: snapshot.error ?? NSError(domain: "Storage", code: -1))
-                }
+                
             }
+            
 
             let downloadURL = try await storageRef.downloadURL()
             let urlString = downloadURL.absoluteString

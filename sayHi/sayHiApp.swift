@@ -19,7 +19,7 @@ struct sayHiApp: App {
             WindowGroup {
                 Group {
                     if authService.user != nil {
-                        MainPlaceholderView(authService: authService)
+                        ConversationListView(authService: authService)
                     } else {
                         AuthView(authService: authService)
                     }
