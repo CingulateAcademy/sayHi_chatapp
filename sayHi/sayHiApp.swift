@@ -5,6 +5,9 @@ import FirebaseAuth
 @main
 struct sayHiApp: App {
     @State private var authService: AuthService
+    
+    @State private var minSplashElapsed = false
+    @State private var showSplash = true
 
         init() {
             // Configure Firebase before any services or auth checks run
@@ -17,38 +20,56 @@ struct sayHiApp: App {
     
     var body: some Scene {
             WindowGroup {
-                Group {
-                    if authService.user != nil {
-                        ConversationListView(authService: authService)
-                    } else {
-                        AuthView(authService: authService)
+                
+                    ZStack{
+                        Group {
+                            if authService.user != nil {
+                                ConversationListView(authService: authService)
+                            } else if authService.isAuthReady{
+                                AuthView(authService: authService)
+                            }else{
+                                Color.sayHiIndigo.ignoresSafeArea()
+                            }
+                        }
+                        .opacity(showSplash ? 0 : 1)
+                        
+                        if showSplash {
+                            SplashView()
+                                .transition(.opacity)
+                                .zIndex(1)
+                        }
+                    }.animation(.easeOut(duration: 0.35), value: showSplash)
+                    .onAppear{
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2){
+                            minSplashElapsed = true
+                            
+                            dismissSplashIfReady()
+                            
+                        }
+                    }.onChange(of: authService.isAuthReady){
+                        _,_ in
+                        
+                        dismissSplashIfReady()
+                    }.onChange(of: minSplashElapsed){
+                        _, _ in
+                        
+                        dismissSplashIfReady()
                     }
-                }
-                .animation(.easeInOut, value: authService.user != nil)
+                
+                
+                
             }
         }
-}
-
-
-struct MainPlaceholderView: View {
-    @Bindable var authService: AuthService
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Text("You're signed in!")
-                    .font(.title.bold())
-                
-                Text(authService.user?.email ?? "")
-                    .foregroundStyle(.secondary)
-
-                Button("Sign Out", role: .destructive) {
-                    authService.signOut()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .navigationTitle("sayHi")
+    
+    private func dismissSplashIfReady(){
+        guard authService.isAuthReady, minSplashElapsed, showSplash else {return}
+        
+        withAnimation(.easeInOut(duration: 0.35)){
+            showSplash = false
         }
     }
 }
+
+
+
 

@@ -8,6 +8,9 @@ final class AuthService {
     var user: User? = nil
     var isLoading = false
     var errorMessage: String?
+    
+    var isAuthReady = false
+   
 
     private var db: Firestore {
         Firestore.firestore()
@@ -15,22 +18,51 @@ final class AuthService {
     private var authStateHandle: AuthStateDidChangeListenerHandle?
 
     init() {
+        
+        if let existing = Auth.auth().currentUser{
+            self.user = existing
+            self.isAuthReady = true
+            
+            Task{
+                await self.validateAndSetUser(existing)
+            }
+        }
+        
+        
+        
             authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
                 
                 guard let self else{return }
-
-                
-                guard let user else{
-                    self.user = nil
-                    return
-                }
                 
                 Task{
-                    await self.validateAndSetUser(user)
+                    @MainActor in
+                    
+                    if let user {
+                        self.user = user
+                        self.isAuthReady = true
+                        Task{
+                            await self.validateAndSetUser(user)
+                        }
+                    }else{
+                        self.user = nil
+                        self.isAuthReady = true
+                    }
                 }
-                
-                
+
+                }
+                    
+        Task{
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run{
+                if !self.isAuthReady{
+                    self.user = Auth.auth().currentUser
+                    self.isAuthReady = true
+                }
             }
+        }
+        
+        
+        
         }
 
     

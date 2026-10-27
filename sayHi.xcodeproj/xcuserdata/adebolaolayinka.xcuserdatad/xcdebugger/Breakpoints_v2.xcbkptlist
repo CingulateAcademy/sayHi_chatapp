@@ -14,8 +14,8 @@
             filePath = "sayHi/Services/AuthService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "163"
-            endingLineNumber = "163"
+            startingLineNumber = "195"
+            endingLineNumber = "195"
             landmarkName = "AuthService"
             landmarkType = "3">
          </BreakpointContent>
